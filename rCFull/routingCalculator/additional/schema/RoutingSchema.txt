@@ -1,0 +1,18 @@
+CREATE DATABASE routing;
+
+CREATE TABLE verticies (
+    verticiesName VARCHAR(10),
+    verticiesXCoor INTEGER NOT NULL,
+    verticiesYCoor INTEGER NOT NULL,
+    PRIMARY KEY(verticiesName)
+);
+
+CREATE TABLE edge (
+    edgeID INTEGER GENERATED ALWAYS AS IDENTITY,
+    edgeStart  VARCHAR(10) NOT NULL,
+    edgeEnd VARCHAR(10) NOT NULL, 
+    edgeWeight INTEGER NOT NULL,
+    PRIMARY KEY(edgeID),
+    CONSTRAINT fkEdgeStart FOREIGN KEY (edgeStart) REFERENCES verticies(verticiesName),
+    CONSTRAINT fkEdgeEnd FOREIGN KEY (edgeEnd) REFERENCES verticies(verticiesName) 
+);

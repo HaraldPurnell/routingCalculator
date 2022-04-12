@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en-US" xmlns="http://www.w3.org/1999/xhtml" xmlns:th="http://www.thymeleaf.org">
+    <head>
+        <title>Routing Calculator</title>
+        <link th:rel="stylesheet" th:href="@{/webjars/bootstrap/4.0.0-2/css/bootstrap.min.css} "/>
+        
+        <style>
+            
+            * { 
+                -moz-box-sizing: border-box; 
+                -webkit-box-sizing: border-box; 
+                box-sizing: border-box; 
+            }
+            
+            div {
+                float: left;
+                padding: 0 10px;
+                overflow: hidden;
+            }
+            
+            #c1 {
+                width: 50%;
+            }
+            
+            #c2r1 {
+                width: 50%;
+            }
+            
+            form  { 
+                display: table;      
+            }
+            
+            .formTableRow { 
+                display: table-row;  
+                margin:10px;
+            }
+            
+            label { 
+                display: table-cell; 
+            }
+            
+            input { 
+                display: table-cell; 
+            }
+            
+        </style>
+        
+    </head>
+    
+    <body> 
+        <div id="c1">
+            <h1 class="display-3">Diagram</h1>
+            <canvas id="myCanvas" ></canvas>
+        </div>
+        
+        <div id="c2r1">
+            <h1 class="display-3">Results</h1>
+            
+            <p id="testElement"/> 
+
+            <form>
+                <p class="formTableRow"> 
+                    <label for="inputStartVertex">Start Vertex:</label>
+                    <input type="text" id="inputStartVertex" minlength="1" maxlength="1" />
+                </p>
+                
+                <p class="formTableRow">
+                    <label for="inputEndVertex">End Vertex:</label>
+                    <input type="text" id="inputEndVertex" minlength="1" maxlength="1" />
+                </p>
+                
+                <p class="formTableRow">
+                    <input type="button" value="Calculate" onclick="buttonShortPath()" class="btn btn-primary"/>
+                </p>    
+            </form>
+            
+            <h3>Output</h3>
+            <p id="shortestPath"></p> 
+            
+        </div>
+
+        <script th:inline="javascript">
+            
+            // --------------------------------------
+            // Global Variables
+            // --------------------------------------
+            
+            // Get arrays from Spring Boot Controller
+            let vertArray = [];
+            let edgeArray = [];
+            vertArray = [[${verts}]];
+            edgeArray = [[${edges}]];
+            
+            // Get references to canvas element
+            let canvas = document.getElementById('myCanvas');
+            let context = canvas.getContext('2d');
+            
+            // Set canvas width and height
+            canvas.width  = window.innerWidth;
+            canvas.height = window.innerHeight;
+            
+            // Size of nodes
+            const radius = 15;
+            
+            // Scales diagram by a factor of...
+            const scaleFactor = 50;
+            const asciiA = 65;
+            /* 
+             * h element removes 95 y spaces from canvas 
+             * Any adjustment in h element size must be offset
+            */
+            const h3Offset = 95;
+            const pi2 = Math.PI * 2;
+
+            let count = 0;
+            let clickArray = [];
+            let testElement = document.getElementById("testElement");
+
+            // --------------------------------------
+            // Event Listener's
+            // --------------------------------------
+            
+            // Find shortest route when two vertices are clicked
+            canvas.addEventListener('click', function(event) {
+                
+                // Clear and redraw graph once every cycle (click)
+                main();
+            
+                let clickX = event.pageX;
+                let clickY = event.pageY;
+
+                for (let i = 0; i < vertArray.length; i++)
+                {
+                    let yCoor = (vertArray[i].verticiesYCoor + 1) * scaleFactor + h3Offset;
+                    let xCoor = (vertArray[i].verticiesXCoor + 1) * scaleFactor;
+ 
+                    if ( 
+                            clickY > (yCoor - radius) &&  
+                            clickY < (yCoor + radius) &&
+                            clickX < (xCoor + radius) &&
+                            clickX > (xCoor - radius)
+                        )   
+                    {
+                        clickArray[count] = [vertArray[i].verticiesXCoor, vertArray[i].verticiesYCoor];
+                        count = count + 1;
+                        
+                        context.beginPath();
+			context.arc(xCoor, yCoor - h3Offset, radius + 10, 0, pi2, false); 
+			context.stroke();
+                    }
+                    
+                    if (count === 2)
+                    {
+                        // Find vertex object corresponding to x and y value
+                        let startNode = vertArray.find(function(entry) {
+                            if(entry.verticiesXCoor === clickArray[0][0] && entry.verticiesYCoor === clickArray[0][1])
+                                return true;
+                        });
+                            
+                        let endNode = vertArray.find(function(entry) {
+                            if(entry.verticiesXCoor === clickArray[1][0] && entry.verticiesYCoor === clickArray[1][1])
+                                return true;
+                        });
+                        
+                        // Get name property from found object
+                        let startNodeName = startNode.verticiesName;
+                        let endNodeName = endNode.verticiesName;
+                        
+                        // Find shortest path
+                        let result = algorithmBellmanFord(startNodeName, endNodeName); 
+                        document.getElementById("shortestPath").innerHTML = result;
+
+                        count = 0;
+                        break;
+                    } 
+                } 
+            }, false); 
+            
+            // Show vertex details on mouse hover
+            canvas.onmousemove = function(e) {
+                let mouseX = e.pageX;
+                let mouseY = e.pageY;
+
+                for (let i = 0; i < vertArray.length; i++)
+                {   
+                    //let vertexDetails = vertArray[i].verticiesName;
+                
+                    let yCoor = (vertArray[i].verticiesYCoor + 1) * scaleFactor + h3Offset;
+                    let xCoor = (vertArray[i].verticiesXCoor + 1) * scaleFactor;
+
+                    if ( 
+                            mouseY > (yCoor - radius) &&  
+                            mouseY < (yCoor + radius) &&
+                            mouseX < (xCoor + radius) &&
+                            mouseX > (xCoor - radius)
+                        )   
+                    {
+                        let allEdgesStart = edgeArray.filter(item => item.edgeStart === vertArray[i].verticiesName);
+                        let allEdgesEnd = edgeArray.filter(item => item.edgeEnd === vertArray[i].verticiesName);
+                        let allEdges = allEdgesStart.concat(allEdgesEnd);
+                        
+                        let vertexDetails = "Current Node: " + vertArray[i].verticiesName + "\n" + "Number of Edges: " + allEdges.length;
+                        
+                        let edgeDetails = "\n";
+                        
+                        for (let j = 0; j < allEdges.length; j++)
+                        {
+                            edgeDetails = edgeDetails + "\n" + "Edge: " + (j + 1) + "\n" + "Edge Start: " + allEdges[j].edgeStart + "\n" + "Edge End: " + allEdges[j].edgeEnd + "\n" 
+                            + "Edge Weight: " + allEdges[j].edgeWeight + "\n" ;
+                        }
+
+                        canvas.title = vertexDetails + edgeDetails;
+                        
+                        break;
+                    }
+                } 
+            }
+
+            // --------------------------------------
+            // Bellman Ford Algorithm
+            // --------------------------------------
+
+            // Bellman Ford uses numbers not Strings
+            function algorithmBellmanFord(startNode, endNode)
+            {
+                let startTime = performance.now();
+            
+                // set all distances to a very large number 
+                let distances = Array(vertArray.length).fill(100000);
+                let paths = Array(vertArray.length);
+
+                // Convert both start and end vertex name to number
+                let asciiStartVertex = startNode.charCodeAt(0) - asciiA;
+                let asciiEndVertex = endNode.charCodeAt(0) - asciiA;
+                
+                // Set position of startNode to 0
+                distances[asciiStartVertex] = 0;
+
+                if(startNode === endNode)
+                {
+                    let result = "Error: selected nodes are the same";
+                    return result;
+                }
+                else if (asciiStartVertex < asciiEndVertex)
+                {
+                    for (let i = 0; i < (vertArray.length); i++)
+                    {
+                        for (let j = 0; j < (edgeArray.length); j++)
+                        {   
+                            let u = (edgeArray[j].edgeStart).charCodeAt(0) - asciiA;
+                            let v = (edgeArray[j].edgeEnd).charCodeAt(0) - asciiA;
+                            let weight = edgeArray[j].edgeWeight;
+                            let edgeString = edgeArray[j].edgeStart + edgeArray[j].edgeEnd;
+                        
+                            if (distances[u] !== 100000 && distances[u] + weight < distances[v])
+                            {
+                                distances[v] = distances[u] + weight;
+                                paths[v] = paths[u] + edgeString;
+                            } 
+                        }
+                    }   
+                }
+                else
+                {
+                    for (let i = 0; i < (vertArray.length); i++)
+                    {
+                        for (let j = 0; j < (edgeArray.length); j++)
+                        {   
+                            let u = (edgeArray[j].edgeStart).charCodeAt(0) - asciiA;
+                            let v = (edgeArray[j].edgeEnd).charCodeAt(0) - asciiA;
+                            let weight = edgeArray[j].edgeWeight;
+                            let edgeString = edgeArray[j].edgeEnd + edgeArray[j].edgeStart;
+                        
+                            if (distances[v] !== 100000 && distances[v] + weight < distances[u])
+                            {
+                                distances[u] = distances[v] + weight;
+                                paths[u] = paths[v] + edgeString;
+                            } 
+                        }
+                    }  
+                }
+                
+                let endTime = performance.now();
+                
+                // substr removes undefined from path
+                let result = "Start: " + startNode + "<br>" 
+                    + "End: " + endNode + "<br>" 
+                    + "Path: " + paths[asciiEndVertex].substr(9) + "<br>" 
+                    + "Cost: " + distances[asciiEndVertex] + "<br>"
+                    + "Search Execution Time: " + `${endTime - startTime} ms`;
+                
+                return result;
+                    
+            } 
+            
+            function buttonShortPath()
+            {
+                let inputStart = document.getElementById("inputStartVertex").value;
+                let inputEnd = document.getElementById("inputEndVertex").value;
+                let result = algorithmBellmanFord(inputStart.toUpperCase(), inputEnd.toUpperCase()); 
+                document.getElementById("shortestPath").innerHTML = result;
+            }
+            
+            // --------------------------------------
+            // Shape drawers
+            // --------------------------------------
+            
+            function drawNode(xCoor, yCoor, name) 
+            {
+                let circle = new Path2D();
+                
+                circle.arc(xCoor * scaleFactor, yCoor * scaleFactor, radius, 0, pi2, false);
+                context.fill(circle);
+                
+                context.textBaseline = "top";
+                context.fillText(name, (xCoor * scaleFactor) - (radius * 2), (yCoor * scaleFactor)  - (radius * 2)); 
+            }
+
+            function drawEdge(startX, startY, endX, endY, weight) 
+            {
+                context.moveTo(startX * scaleFactor, startY * scaleFactor);
+                context.lineTo(endX * scaleFactor, endY * scaleFactor);
+
+                context.fillText(weight, (((endX * scaleFactor) + (startX * scaleFactor)) / 2), (((endY * scaleFactor) + (startY * scaleFactor))/2));
+  
+                context.stroke();
+            }
+
+            // --------------------------------------
+            // Entry Point
+            // --------------------------------------
+            
+            function main()
+            {
+                let startTime = performance.now();
+                
+                context.clearRect(0, 0, window.innerWidth, window.innerHeight);
+                
+                context.textAlign = "center";
+                context.font = "20px Arial";
+
+                for (let i = 0; i < vertArray.length; i++)
+                {
+                    // +1 removes 0 as coordinate
+                    let startXCoor =  vertArray[i].verticiesXCoor + 1;   
+                    let startYCoor =  vertArray[i].verticiesYCoor + 1; 
+                    let startName = vertArray[i].verticiesName;
+
+                    drawNode(startXCoor, startYCoor, startName);
+                }
+
+                /* 
+                * 1. Find vertex which edgeStart points to
+                * 2. Find vertex which edgeEnd points to
+                * 3. Find x-coordinate and y-coordinate from verticies array using 1 and 2
+                */
+                for (let i = 0; i < edgeArray.length; i++)
+                {
+                    let start = edgeArray[i].edgeStart;
+                    let end = edgeArray[i].edgeEnd;
+                    
+                    // +1 removes 0 as coordinate
+                    let startVertObj = vertArray.find(function(entry) {
+                        if(entry.verticiesName === start)
+                            return true;
+                    });
+                    
+                    let startXCoor =  startVertObj.verticiesXCoor + 1;   
+                    let startYCoor =  startVertObj.verticiesYCoor + 1; 
+
+                    let endVertObj = vertArray.find(function(entry) {
+                        if(entry.verticiesName === end)
+                            return true;
+                    });
+                    
+                    let endXCoor =  endVertObj.verticiesXCoor + 1;   
+                    let endYCoor =  endVertObj.verticiesYCoor + 1; 
+                    let weight = edgeArray[i].edgeWeight;
+                    
+                    let label = start + end + weight;
+                    
+                    drawEdge(startXCoor, startYCoor, endXCoor, endYCoor, label, 1);
+                }
+
+                let endTime = performance.now();
+
+                let testResults = "Diagram Execution Time: " + `${endTime - startTime} ms` + "<br>" 
+                        + "Number of vertices: " + vertArray.length + "<br>" 
+                        + "Number of edges: " + edgeArray.length + "<br>";
+                
+                testElement.innerHTML = testResults;
+            } 
+
+            main();
+        </script>
+    </body>
+</html>
